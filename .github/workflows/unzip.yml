@@ -1,0 +1,51 @@
+name: Auto Unzip & Commit Project
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '*.zip'
+      - '**/*.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract ZIP archive to repository root
+        run: |
+          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No ZIP file found in repository."
+            exit 0
+          fi
+          echo "Extracting $ZIP_FILE..."
+          unzip -o "$ZIP_FILE" -d ./temp_extracted
+          SUBDIRS=$(find ./temp_extracted -mindepth 1 -maxdepth 1 -type d)
+          FILE_COUNT=$(find ./temp_extracted -mindepth 1 -maxdepth 1 -type f | wc -l)
+          if [ "$FILE_COUNT" -eq 0 ] && [ $(echo "$SUBDIRS" | wc -l) -eq 1 ]; then
+            cp -rf "$SUBDIRS"/. .
+          else
+            cp -rf ./temp_extracted/. .
+          fi
+          rm -rf ./temp_extracted "$ZIP_FILE"
+
+      - name: Commit and push extracted project files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --staged --quiet; then
+            git commit -m "Extract JellyGlassDialer v2 project files from ZIP"
+            git push
+          else
+            echo "Nothing new to commit."
+          fi
