@@ -1,7 +1,10 @@
 package com.jellyglass.dialer
 
 import android.Manifest
+import android.app.Activity
 import android.app.role.RoleManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -98,6 +101,13 @@ fun JellyGlassApp(initialDialNumber: String = "") {
     val autoSpamBlock by store.autoSpamBlockFlow.collectAsState(initial = false)
     val googleEmail by store.googleEmailFlow.collectAsState(initial = "")
     val googleName by store.googleNameFlow.collectAsState(initial = "")
+    val liquidGlass by store.liquidGlassFlow.collectAsState(initial = 0.70f)
+    val jellyBounce by store.jellyBounceFlow.collectAsState(initial = 0.75f)
+    val highRefresh by store.highRefreshFlow.collectAsState(initial = true)
+
+    LaunchedEffect(highRefresh) {
+        (context as? Activity)?.let { applyPreferredRefreshRate(it, highRefresh) }
+    }
 
     var currentTab by remember { mutableStateOf(MainTab.KEYPAD) }
     var dialInput by remember { mutableStateOf(initialDialNumber) }
@@ -146,6 +156,10 @@ fun JellyGlassApp(initialDialNumber: String = "") {
         colors = listOf(theme.bgTop, theme.bgMid, theme.bgBottom)
     )
 
+    CompositionLocalProvider(
+        LocalLiquidGlassIntensity provides liquidGlass,
+        LocalJellyBounceIntensity provides jellyBounce
+    ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -219,12 +233,18 @@ fun JellyGlassApp(initialDialNumber: String = "") {
                         aiMode = aiMode,
                         apiKey = apiKey,
                         autoSpamBlock = autoSpamBlock,
+                        liquidGlass = liquidGlass,
+                        jellyBounce = jellyBounce,
+                        highRefresh = highRefresh,
                         googleName = googleName,
                         googleEmail = googleEmail,
                         contacts = contacts,
                         onSelectTheme = { scope.launch { store.setTheme(it) } },
                         onSelectIconPack = { scope.launch { store.setIconPack(it) } },
                         onSelectCallStyle = { scope.launch { store.setCallStyle(it) } },
+                        onLiquidGlassChange = { scope.launch { store.setLiquidGlass(it) } },
+                        onJellyBounceChange = { scope.launch { store.setJellyBounce(it) } },
+                        onHighRefreshToggle = { scope.launch { store.setHighRefresh(it) } },
                         onApiKeyChange = { scope.launch { store.setApiKey(it) } },
                         onAutoSpamToggle = { scope.launch { store.setAutoSpamBlock(it) } },
                         onGoogleAccountUpdated = { name, email ->
@@ -281,6 +301,7 @@ fun JellyGlassApp(initialDialNumber: String = "") {
                 }
             )
         }
+    }
     }
 }
 
@@ -899,6 +920,14 @@ fun KeypadTabScreen(
             }
         }
 
+        val latestDialInput by rememberUpdatedState(dialInput)
+        val toneGenerator = remember {
+            runCatching { ToneGenerator(AudioManager.STREAM_DTMF, 65) }.getOrNull()
+        }
+        DisposableEffect(Unit) {
+            onDispose { runCatching { toneGenerator?.release() } }
+        }
+
         val keys = listOf(
             listOf("1" to "∞", "2" to "ABC", "3" to "DEF"),
             listOf("4" to "GHI", "5" to "JKL", "6" to "MNO"),
@@ -921,7 +950,23 @@ fun KeypadTabScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .jellyBounce(pressedScale = 0.85f) {
-                                    onDialInputChange(dialInput + digit)
+                                    onDialInputChange(latestDialInput + digit)
+                                    val tone = when (digit) {
+                                        "0" -> ToneGenerator.TONE_DTMF_0
+                                        "1" -> ToneGenerator.TONE_DTMF_1
+                                        "2" -> ToneGenerator.TONE_DTMF_2
+                                        "3" -> ToneGenerator.TONE_DTMF_3
+                                        "4" -> ToneGenerator.TONE_DTMF_4
+                                        "5" -> ToneGenerator.TONE_DTMF_5
+                                        "6" -> ToneGenerator.TONE_DTMF_6
+                                        "7" -> ToneGenerator.TONE_DTMF_7
+                                        "8" -> ToneGenerator.TONE_DTMF_8
+                                        "9" -> ToneGenerator.TONE_DTMF_9
+                                        "*" -> ToneGenerator.TONE_DTMF_S
+                                        "#" -> ToneGenerator.TONE_DTMF_P
+                                        else -> ToneGenerator.TONE_DTMF_0
+                                    }
+                                    runCatching { toneGenerator?.startTone(tone, 80) }
                                 }
                         ) {
                             Column(
@@ -1205,12 +1250,18 @@ fun SettingsTabScreen(
     aiMode: AiEngineMode,
     apiKey: String,
     autoSpamBlock: Boolean,
+    liquidGlass: Float,
+    jellyBounce: Float,
+    highRefresh: Boolean,
     googleName: String,
     googleEmail: String,
     contacts: List<ContactItem>,
     onSelectTheme: (GlassThemeStyle) -> Unit,
     onSelectIconPack: (IconPackStyle) -> Unit,
     onSelectCallStyle: (CallScreenStyle) -> Unit,
+    onLiquidGlassChange: (Float) -> Unit,
+    onJellyBounceChange: (Float) -> Unit,
+    onHighRefreshToggle: (Boolean) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onAutoSpamToggle: (Boolean) -> Unit,
     onGoogleAccountUpdated: (String, String) -> Unit,
@@ -1244,7 +1295,80 @@ fun SettingsTabScreen(
     ) {
         item {
             Text("Settings & Studio", color = theme.textPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text("Customize Liquid Glass themes, icon packs, call UI & cloud backup", color = theme.textSecondary, fontSize = 13.sp)
+            Text("Customize Liquid Glass, Bouncy Jelly physics, 120Hz display & cloud backup", color = theme.textSecondary, fontSize = 13.sp)
+        }
+
+        item {
+            FrostedGlassCard(theme = theme, modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Rounded.Tune, contentDescription = null, tint = theme.accent)
+                        Text("Liquid Glass & Bouncy Jelly Studio", color = theme.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Column {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Liquid Glass Frost & Specular Glow", color = theme.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("${(liquidGlass * 100).toInt()}%", color = theme.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = liquidGlass,
+                            onValueChange = onLiquidGlassChange,
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = theme.accent,
+                                activeTrackColor = theme.accent
+                            )
+                        )
+                    }
+
+                    Column {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Bouncy Jelly Touch Effect", color = theme.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("${(jellyBounce * 100).toInt()}%", color = theme.accentSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = jellyBounce,
+                            onValueChange = onJellyBounceChange,
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = theme.accentSecondary,
+                                activeTrackColor = theme.accentSecondary
+                            )
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("90Hz – 120Hz Smooth Refresh Lock", color = theme.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Runs keypad & jelly animations at native 120Hz", color = theme.textSecondary, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = highRefresh,
+                            onCheckedChange = onHighRefreshToggle
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Auto-Block High-Risk Spam", color = theme.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Silences 140/160 telemarketers automatically", color = theme.textSecondary, fontSize = 12.sp)
+                        }
+                        Switch(
+                            checked = autoSpamBlock,
+                            onCheckedChange = onAutoSpamToggle
+                        )
+                    }
+                }
+            }
         }
 
         item {

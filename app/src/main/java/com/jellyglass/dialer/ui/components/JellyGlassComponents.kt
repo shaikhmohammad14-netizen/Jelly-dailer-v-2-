@@ -6,7 +6,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,7 +24,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -30,27 +31,37 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jellyglass.dialer.ui.theme.GlassThemeStyle
 
+val LocalLiquidGlassIntensity = compositionLocalOf { 0.70f }
+val LocalJellyBounceIntensity = compositionLocalOf { 0.75f }
+
 fun Modifier.jellyBounce(
     pressedScale: Float = 0.88f,
     enableHaptic: Boolean = true,
     onClick: () -> Unit
 ): Modifier = composed {
-    var isPressed by remember { mutableStateOf(false) }
+    val bounceIntensity = LocalJellyBounceIntensity.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val haptic = LocalHapticFeedback.current
+    val latestOnClick by rememberUpdatedState(onClick)
+
+    val damping = (0.88f - (bounceIntensity * 0.56f)).coerceIn(0.30f, 0.92f)
+    val stiffness = Spring.StiffnessMediumLow + (bounceIntensity * 260f)
+    val dynamicPressedScale = 1f - ((1f - pressedScale) * (0.35f + bounceIntensity * 0.95f))
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) pressedScale else 1f,
+        targetValue = if (isPressed) dynamicPressedScale else 1f,
         animationSpec = spring(
-            dampingRatio = 0.42f,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = damping,
+            stiffness = stiffness
         ),
         label = "jellyScale"
     )
 
     val stretchX by animateFloatAsState(
-        targetValue = if (isPressed) 1.05f else 1f,
+        targetValue = if (isPressed) (1f + 0.06f * bounceIntensity) else 1f,
         animationSpec = spring(
-            dampingRatio = 0.40f,
+            dampingRatio = damping,
             stiffness = Spring.StiffnessLow
         ),
         label = "jellyStretchX"
@@ -61,21 +72,16 @@ fun Modifier.jellyBounce(
             scaleX = scale * stretchX
             scaleY = scale
         }
-        .pointerInput(Unit) {
-            detectTapGestures(
-                onPress = {
-                    isPressed = true
-                    if (enableHaptic) {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    }
-                    tryAwaitRelease()
-                    isPressed = false
-                },
-                onTap = {
-                    onClick()
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = {
+                if (enableHaptic) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 }
-            )
-        }
+                latestOnClick()
+            }
+        )
 }
 
 @Composable
@@ -87,30 +93,39 @@ fun FrostedGlassCard(
     contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable BoxScope.() -> Unit
 ) {
+    val glassIntensity = LocalLiquidGlassIntensity.current
+    val alphaScale = (0.45f + glassIntensity * 0.85f).coerceIn(0.35f, 1.35f)
+    val borderWidth = (0.75f + glassIntensity * 0.95f).dp
+
+    val topBorderAlpha = (theme.glassBorderTop.alpha * alphaScale).coerceIn(0.12f, 0.95f)
+    val bottomBorderAlpha = (theme.glassBorderBottom.alpha * alphaScale).coerceIn(0.06f, 0.65f)
+    val surfaceAlpha = (theme.glassSurface.alpha * alphaScale).coerceIn(0.10f, 0.88f)
+
     val specularBrush = Brush.verticalGradient(
         colors = listOf(
-            theme.glassBorderTop,
-            theme.glassBorderBottom
+            theme.glassBorderTop.copy(alpha = topBorderAlpha),
+            theme.glassBorderBottom.copy(alpha = bottomBorderAlpha)
         )
     )
     val innerSheen = Brush.linearGradient(
         colors = listOf(
-            theme.glassSurface,
-            theme.glassSurface.copy(alpha = theme.glassSurface.alpha * 0.55f)
+            theme.glassSurface.copy(alpha = surfaceAlpha),
+            theme.glassSurface.copy(alpha = surfaceAlpha * 0.52f),
+            theme.accent.copy(alpha = 0.06f * glassIntensity)
         )
     )
 
     Box(
         modifier = modifier
             .shadow(
-                elevation = elevation,
+                elevation = (elevation.value * (0.5f + glassIntensity * 0.7f)).dp,
                 shape = shape,
-                ambientColor = theme.accent.copy(alpha = 0.14f),
+                ambientColor = theme.accent.copy(alpha = 0.16f * glassIntensity),
                 spotColor = Color.Black.copy(alpha = if (theme.isDark) 0.45f else 0.12f)
             )
             .clip(shape)
             .background(innerSheen)
-            .border(BorderStroke(1.15.dp, specularBrush), shape)
+            .border(BorderStroke(borderWidth, specularBrush), shape)
             .padding(contentPadding),
         content = content
     )

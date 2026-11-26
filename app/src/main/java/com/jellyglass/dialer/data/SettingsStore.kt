@@ -3,6 +3,7 @@ package com.jellyglass.dialer.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.jellyglass.dialer.ui.theme.CallScreenStyle
@@ -23,6 +24,9 @@ class SettingsStore(private val context: Context) {
         val KEY_AUTO_SPAM_BLOCK = booleanPreferencesKey("auto_spam_block")
         val KEY_GOOGLE_EMAIL = stringPreferencesKey("google_account_email")
         val KEY_GOOGLE_NAME = stringPreferencesKey("google_account_name")
+        val KEY_LIQUID_GLASS = floatPreferencesKey("liquid_glass_intensity")
+        val KEY_JELLY_BOUNCE = floatPreferencesKey("jelly_bounce_intensity")
+        val KEY_HIGH_REFRESH = booleanPreferencesKey("high_refresh_rate_120hz")
     }
 
     val themeFlow: Flow<GlassThemeStyle> = context.dataStore.data.map { prefs ->
@@ -49,6 +53,9 @@ class SettingsStore(private val context: Context) {
     val autoSpamBlockFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_SPAM_BLOCK] ?: false }
     val googleEmailFlow: Flow<String> = context.dataStore.data.map { it[KEY_GOOGLE_EMAIL] ?: "" }
     val googleNameFlow: Flow<String> = context.dataStore.data.map { it[KEY_GOOGLE_NAME] ?: "" }
+    val liquidGlassFlow: Flow<Float> = context.dataStore.data.map { it[KEY_LIQUID_GLASS] ?: 0.70f }
+    val jellyBounceFlow: Flow<Float> = context.dataStore.data.map { it[KEY_JELLY_BOUNCE] ?: 0.75f }
+    val highRefreshFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_HIGH_REFRESH] ?: true }
 
     suspend fun setTheme(style: GlassThemeStyle) {
         context.dataStore.edit { it[KEY_THEME] = style.id }
@@ -79,5 +86,17 @@ class SettingsStore(private val context: Context) {
             it[KEY_GOOGLE_NAME] = name
             it[KEY_GOOGLE_EMAIL] = email
         }
+    }
+
+    suspend fun setLiquidGlass(intensity: Float) {
+        context.dataStore.edit { it[KEY_LIQUID_GLASS] = intensity.coerceIn(0f, 1f) }
+    }
+
+    suspend fun setJellyBounce(intensity: Float) {
+        context.dataStore.edit { it[KEY_JELLY_BOUNCE] = intensity.coerceIn(0f, 1f) }
+    }
+
+    suspend fun setHighRefresh(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_HIGH_REFRESH] = enabled }
     }
 }
