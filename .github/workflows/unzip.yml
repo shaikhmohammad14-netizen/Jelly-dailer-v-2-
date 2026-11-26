@@ -29,9 +29,11 @@ jobs:
           fi
           echo "Extracting $ZIP_FILE..."
           unzip -o "$ZIP_FILE" -d ./temp_extracted
+          rm -rf ./temp_extracted/.github/workflows
           SUBDIRS=$(find ./temp_extracted -mindepth 1 -maxdepth 1 -type d)
           FILE_COUNT=$(find ./temp_extracted -mindepth 1 -maxdepth 1 -type f | wc -l)
           if [ "$FILE_COUNT" -eq 0 ] && [ $(echo "$SUBDIRS" | wc -l) -eq 1 ]; then
+            rm -rf "$SUBDIRS/.github/workflows"
             cp -rf "$SUBDIRS"/. .
           else
             cp -rf ./temp_extracted/. .
