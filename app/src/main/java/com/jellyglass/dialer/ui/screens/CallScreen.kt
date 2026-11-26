@@ -334,7 +334,7 @@ fun InCallScreen(
                             }
                             selectedAiBanner?.let { activeScript ->
                                 Text(
-                                    text = "Active Prompt: "$activeScript"",
+                                    text = "Active Prompt: “$activeScript”",
                                     color = Color(0xFF34D399),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold

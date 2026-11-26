@@ -30,7 +30,7 @@ object SpamAndAiEngine {
     )
 
     fun analyzeOfflineSpam(rawNumber: String, callerName: String? = null): SpamVerdict {
-        val cleaned = rawNumber.replace("\s+".toRegex(), "").replace("-", "")
+        val cleaned = rawNumber.filterNot { it.isWhitespace() || it == '-' }
         val digitsOnly = cleaned.filter { it.isDigit() }
         val lowerName = callerName.orEmpty().lowercase()
 
@@ -88,7 +88,7 @@ object SpamAndAiEngine {
                     sourceEngine = "On-Device Shield"
                 )
             }
-            if (last10.startsWith("0") || last10.startsWith("1") || last10.startsWith("2") || last10.startsWith("3") || last10.startsWith("4") || last10.startsWith("5")) {
+            if (last10.first() in '0'..'5') {
                 return SpamVerdict(
                     isSpam = true,
                     score = 84,
@@ -195,12 +195,15 @@ object SpamAndAiEngine {
         val topCaller = recents.groupBy { it.name }.maxByOrNull { it.value.size }
 
         val offlineSummary = buildString {
-            append("• Total recent calls analyzed: ${recents.size}\n")
+            append("• Total recent calls analyzed: ${recents.size}
+")
             append("• Missed calls needing callback: ${missed.size}")
             if (missed.isNotEmpty()) {
                 append(" (${missed.take(3).joinToString { it.name }})")
             }
-            append("\n• High-risk spam calls blocked/flagged: $spamCount\n")
+            append("
+• High-risk spam calls blocked/flagged: $spamCount
+")
             if (topCaller != null) {
                 append("• Most frequent contact: ${topCaller.key} (${topCaller.value.size} calls)")
             }
