@@ -194,20 +194,19 @@ object SpamAndAiEngine {
         val spamCount = recents.count { it.spamRiskScore >= 70 }
         val topCaller = recents.groupBy { it.name }.maxByOrNull { it.value.size }
 
-        val offlineSummary = buildString {
-            append("• Total recent calls analyzed: ${recents.size}
-")
-            append("• Missed calls needing callback: ${missed.size}")
-            if (missed.isNotEmpty()) {
-                append(" (${missed.take(3).joinToString { it.name }})")
-            }
-            append("
-• High-risk spam calls blocked/flagged: $spamCount
-")
-            if (topCaller != null) {
-                append("• Most frequent contact: ${topCaller.key} (${topCaller.value.size} calls)")
-            }
+        val lines = mutableListOf<String>()
+        lines.add("• Total recent calls analyzed: ${recents.size}")
+        val missedNames = if (missed.isNotEmpty()) {
+            " (" + missed.take(3).joinToString(", ") { it.name } + ")"
+        } else {
+            ""
         }
+        lines.add("• Missed calls needing callback: ${missed.size}$missedNames")
+        lines.add("• High-risk spam calls blocked/flagged: $spamCount")
+        if (topCaller != null) {
+            lines.add("• Most frequent contact: ${topCaller.key} (${topCaller.value.size} calls)")
+        }
+        val offlineSummary = lines.joinToString(separator = System.lineSeparator())
 
         if (mode == AiEngineMode.ON_DEVICE || apiKey.isBlank()) {
             return@withContext offlineSummary
